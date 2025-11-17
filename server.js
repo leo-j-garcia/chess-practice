@@ -91,17 +91,23 @@ async function detectChessPosition(imageBuffer) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const prompt = `You are a chess position analyzer. Analyze this image of a chess board and return ONLY the FEN (Forsyth-Edwards Notation) string representing the position.
+    const prompt = `You are a chess position analyzer. Analyze this image of a chess board and return a JSON response with the position and who moves next.
 
 Important instructions:
-- Return ONLY the FEN string, nothing else
-- FEN format: piece placement / piece placement / ... / piece placement side_to_move castling en_passant halfmove fullmove
+1. Look at the chess board and identify all pieces
+2. Read any text in the image (often below the board) that says "White to move", "Black to move", "White to play", "Black to play", etc.
+3. Return a JSON object with:
+   - "fen": the FEN string for the position
+   - "sideToMove": either "w" for white or "b" for black based on the text in the image
+
+FEN format details:
 - Use standard notation: K=white king, k=black king, Q=queen, R=rook, B=bishop, N=knight, P=pawn (uppercase=white, lowercase=black)
 - Numbers represent empty squares
 - Start from rank 8 (top) to rank 1 (bottom), files a-h (left to right)
-- If you cannot determine the position clearly, return: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 (starting position)
+- FEN format: piece placement / piece placement / ... / piece placement side_to_move castling en_passant halfmove fullmove
 
-Example FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`;
+Return ONLY valid JSON, nothing else. Example:
+{"fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "sideToMove": "w"}`;
 
     const imagePart = {
       inlineData: {
@@ -116,9 +122,33 @@ Example FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1`;
 
     console.log('Gemini response:', text);
 
-    // Extract FEN from response (in case there's extra text)
-    const fenMatch = text.match(/[rnbqkpRNBQKP1-8\/]+\s+[wb]\s+[KQkq-]+\s+[a-h3-6-]+\s+\d+\s+\d+/);
-    return fenMatch ? fenMatch[0] : text;
+    // Parse JSON response
+    try {
+      // Try to extract JSON if there's extra text
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonText = jsonMatch ? jsonMatch[0] : text;
+      const parsed = JSON.parse(jsonText);
+
+      // Update the FEN with the correct side to move
+      let fen = parsed.fen;
+      const sideToMove = parsed.sideToMove || 'w';
+
+      // Replace the side-to-move part of the FEN (second field)
+      const fenParts = fen.split(' ');
+      if (fenParts.length >= 2) {
+        fenParts[1] = sideToMove;
+        fen = fenParts.join(' ');
+      }
+
+      console.log(`Position: ${fen}, Side to move: ${sideToMove === 'w' ? 'White' : 'Black'}`);
+      return fen;
+
+    } catch (parseError) {
+      console.warn('Could not parse JSON, falling back to regex extraction');
+      // Fallback to old method if JSON parsing fails
+      const fenMatch = text.match(/[rnbqkpRNBQKP1-8\/]+\s+[wb]\s+[KQkq-]+\s+[a-h3-6-]+\s+\d+\s+\d+/);
+      return fenMatch ? fenMatch[0] : text;
+    }
 
   } catch (error) {
     console.error('Gemini API error:', error);
