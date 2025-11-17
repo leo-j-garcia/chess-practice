@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess Practice - Position Capture</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .option {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 25px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: 2px solid transparent;
+    }
+
+    .option:hover {
+      background: #e9ecef;
+      border-color: #667eea;
+      transform: translateY(-2px);
+    }
+
+    .option h2 {
+      color: #333;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .option p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .icon {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>♟️ Chess Practice</h1>
+    <p class="subtitle">Capture positions from your chess books</p>
+
+    <div class="option" onclick="location.href='/mobile'">
+      <div class="icon">📱</div>
+      <h2>Mobile - Capture</h2>
+      <p>Use your phone's camera to capture chess positions</p>
+    </div>
+
+    <div class="option" onclick="location.href='/desktop'">
+      <div class="icon">💻</div>
+      <h2>Desktop - Receive</h2>
+      <p>View captured positions and analyze on chess.com</p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess Capture - Desktop</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 50px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 40px;
+      font-size: 16px;
+    }
+
+    .pairing-section {
+      margin-bottom: 40px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 15px;
+      font-weight: 600;
+      color: #333;
+      font-size: 18px;
+    }
+
+    .code-input {
+      font-size: 48px;
+      font-weight: bold;
+      text-align: center;
+      padding: 20px;
+      border: 3px solid #ddd;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 250px;
+      letter-spacing: 15px;
+      color: #667eea;
+      transition: border-color 0.3s;
+    }
+
+    .code-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .status {
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 30px;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .status.waiting {
+      background: #fff3cd;
+      color: #856404;
+      border: 2px solid #ffc107;
+    }
+
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+      border: 2px solid #28a745;
+    }
+
+    .status.received {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 2px solid #17a2b8;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .position-info {
+      background: #f8f9fa;
+      padding: 25px;
+      border-radius: 12px;
+      margin-top: 30px;
+      text-align: left;
+    }
+
+    .position-info h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 20px;
+    }
+
+    .fen-text {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+      margin-bottom: 20px;
+      border: 2px solid #667eea;
+      color: #333;
+    }
+
+    .action-button {
+      display: inline-block;
+      padding: 18px 40px;
+      font-size: 18px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.3s;
+      margin-top: 10px;
+    }
+
+    .action-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+
+    .waiting-animation {
+      display: inline-block;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">💻</div>
+    <h1>Desktop Receiver</h1>
+    <p class="subtitle">Enter the pairing code from your mobile device</p>
+
+    <div class="pairing-section">
+      <label for="pairingCode">Pairing Code:</label>
+      <input
+        type="text"
+        id="pairingCode"
+        class="code-input"
+        placeholder="0000"
+        maxlength="4"
+        pattern="[0-9]*"
+        inputmode="numeric"
+      >
+    </div>
+
+    <div id="statusWaiting" class="status waiting hidden">
+      <div class="waiting-animation">⏳</div>
+      <div>Waiting for position from mobile...</div>
+    </div>
+
+    <div id="statusConnected" class="status connected hidden">
+      ✓ Connected! Ready to receive positions.
+    </div>
+
+    <div id="positionInfo" class="position-info hidden">
+      <h3>♟️ Position Received!</h3>
+      <div class="fen-text" id="fenText"></div>
+      <a href="#" id="chesscomLink" class="action-button" target="_blank">
+        🎯 Analyze on Chess.com
+      </a>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const pairingCodeInput = document.getElementById('pairingCode');
+    const statusWaiting = document.getElementById('statusWaiting');
+    const statusConnected = document.getElementById('statusConnected');
+    const positionInfo = document.getElementById('positionInfo');
+    const fenText = document.getElementById('fenText');
+    const chesscomLink = document.getElementById('chesscomLink');
+
+    // Generate random pairing code on load
+    function generateCode() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
+    const defaultCode = generateCode();
+    pairingCodeInput.value = defaultCode;
+    joinSession(defaultCode);
+
+    // Handle pairing code changes
+    pairingCodeInput.addEventListener('input', (e) => {
+      const code = e.target.value;
+      if (code.length === 4) {
+        joinSession(code);
+      }
+    });
+
+    function joinSession(code) {
+      socket.emit('join-session', code);
+    }
+
+    socket.on('session-joined', ({ pairingCode }) => {
+      console.log('Joined session:', pairingCode);
+      statusConnected.classList.remove('hidden');
+      statusWaiting.classList.remove('hidden');
+      positionInfo.classList.add('hidden');
+    });
+
+    socket.on('position-detected', ({ fen }) => {
+      console.log('Position received:', fen);
+
+      // Hide waiting status
+      statusWaiting.classList.add('hidden');
+
+      // Show position info
+      fenText.textContent = fen;
+
+      // Create chess.com analysis link
+      const encodedFen = encodeURIComponent(fen);
+      chesscomLink.href = `https://www.chess.com/analysis?fen=${encodedFen}`;
+
+      positionInfo.classList.remove('hidden');
+
+      // Auto-open in new tab
+      window.open(chesscomLink.href, '_blank');
+    });
+
+    socket.on('disconnect', () => {
+      statusConnected.classList.add('hidden');
+      statusWaiting.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
