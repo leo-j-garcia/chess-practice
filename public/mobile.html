@@ -229,37 +229,50 @@
       border: 3px solid #e8e8e8;
       color: #f5f5f0;
       position: relative;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
     }
 
-    .copy-btn {
+    .fen-display:hover {
+      background: #356a57;
+      border-color: #c44e47;
+    }
+
+    .fen-display:active {
+      transform: scale(0.98);
+    }
+
+    .fen-display.copied {
+      background: #c44e47;
+      border-color: #e8e8e8;
+    }
+
+    .fen-display::after {
+      content: '📋 Click to copy';
       position: absolute;
       top: 10px;
       right: 10px;
-      background: #c44e47;
-      color: #f5f5f0;
-      border: 2px solid #e8e8e8;
-      padding: 8px 16px;
+      background: rgba(0,0,0,0.3);
+      color: #e8e8e8;
+      padding: 6px 12px;
       border-radius: 0;
-      font-size: 11px;
-      cursor: pointer;
+      font-size: 10px;
       font-family: 'PT Sans', sans-serif;
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 1px;
+      pointer-events: none;
+      opacity: 0.7;
     }
 
-    .copy-btn:active {
-      background: #a63d37;
-      transform: scale(0.95);
-    }
-
-    .copy-success {
-      background: #2a5a47 !important;
-      border-color: #e8e8e8 !important;
+    .fen-display.copied::after {
+      content: '✓ Copied!';
+      background: rgba(0,0,0,0.5);
     }
 
     .fen-text {
-      padding-right: 90px;
+      padding-right: 130px;
       line-height: 1.6;
     }    .copy-btn {
       position: absolute;
@@ -322,6 +335,10 @@
         📷 Start Camera
       </button>
 
+      <button id="flashBtn" class="btn-secondary hidden">
+        💡 Toggle Flash
+      </button>
+
       <button id="captureBtn" class="btn-success hidden" disabled>
         ✓ Capture Position
       </button>
@@ -335,9 +352,22 @@
       </button>
 
       <div id="uploadStatus" class="status hidden"></div>
+
       <div id="fenDisplay" class="fen-display hidden">
-        <button id="copyBtn" class="copy-btn">📋 Copy</button>
         <div class="fen-text" id="fenText"></div>
+      </div>
+
+      <div id="fenEditor" class="hidden" style="margin-top: 15px;">
+        <label for="fenInput" style="display: block; margin-bottom: 8px; font-weight: 700; color: #e8e8e8; font-family: 'PT Sans', sans-serif; text-transform: uppercase; font-size: 12px; letter-spacing: 2px;">Edit FEN (if needed):</label>
+        <input
+          type="text"
+          id="fenInput"
+          style="width: 100%; padding: 12px; font-size: 12px; border: 3px solid #e8e8e8; border-radius: 0; background: #1e4d3c; color: #f5f5f0; font-family: 'Courier New', monospace;"
+          placeholder="Enter FEN string..."
+        >
+        <button id="sendManualFen" class="btn-primary" style="margin-top: 10px;">
+          ✓ Send Corrected Position
+        </button>
       </div>
     </div>
   </div>  <script src="/socket.io/socket.io.js"></script>
@@ -348,17 +378,21 @@
     const pairingCodeInput = document.getElementById('pairingCode');
     const connectionStatus = document.getElementById('connectionStatus');
     const startCameraBtn = document.getElementById('startCamera');
+    const flashBtn = document.getElementById('flashBtn');
     const captureBtn = document.getElementById('captureBtn');
     const retakeBtn = document.getElementById('retakeBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const uploadStatus = document.getElementById('uploadStatus');
     const fenDisplay = document.getElementById('fenDisplay');
     const fenText = document.getElementById('fenText');
-    const copyBtn = document.getElementById('copyBtn');
+    const fenEditor = document.getElementById('fenEditor');
+    const fenInput = document.getElementById('fenInput');
+    const sendManualFen = document.getElementById('sendManualFen');
 
     let stream = null;
     let capturedBlob = null;
     let currentFen = '';
+    let flashEnabled = false;
 
     // Handle pairing code input
     pairingCodeInput.addEventListener('input', (e) => {
@@ -376,16 +410,43 @@
       showStatus(connectionStatus, 'Connected! Code: ' + pairingCode, 'success');
     });
 
-    // Start camera
+    // Start camera with flash/torch
     startCameraBtn.addEventListener('click', async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' },
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
           audio: false
         });
+
         video.srcObject = stream;
+
+        // Enable torch/flash if available
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+
+        if (capabilities.torch) {
+          try {
+            await track.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+            console.log('Flash enabled');
+          } catch (e) {
+            console.log('Could not enable flash:', e);
+          }
+        }
+
         video.style.display = 'block';
         startCameraBtn.classList.add('hidden');
+
+        // Show flash button if torch is available
+        if (capabilities.torch) {
+          flashBtn.classList.remove('hidden');
+        }
+
         captureBtn.classList.remove('hidden');
         captureBtn.disabled = false;
       } catch (err) {
@@ -393,16 +454,71 @@
       }
     });
 
-    // Capture photo
+    // Toggle flash
+    flashBtn.addEventListener('click', async () => {
+      if (!stream) return;
+
+      const track = stream.getVideoTracks()[0];
+      flashEnabled = !flashEnabled;
+
+      try {
+        await track.applyConstraints({
+          advanced: [{ torch: flashEnabled }]
+        });
+        flashBtn.textContent = flashEnabled ? '💡 Flash ON' : '💡 Flash OFF';
+      } catch (err) {
+        console.error('Could not toggle flash:', err);
+      }
+    });
+
+    // Capture photo with enhanced quality
     captureBtn.addEventListener('click', () => {
       const canvas = preview;
       const context = canvas.getContext('2d');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+
+      // Draw the image
       context.drawImage(video, 0, 0);
 
-      canvas.toBlob((blob) => {
+      // Apply image enhancement for better OCR
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Increase contrast and brightness
+      const contrast = 1.3;
+      const brightness = 10;
+
+      for (let i = 0; i < data.length; i += 4) {
+        // Apply contrast
+        data[i] = ((data[i] - 128) * contrast) + 128 + brightness;     // Red
+        data[i + 1] = ((data[i + 1] - 128) * contrast) + 128 + brightness; // Green
+        data[i + 2] = ((data[i + 2] - 128) * contrast) + 128 + brightness; // Blue
+
+        // Clamp values
+        data[i] = Math.max(0, Math.min(255, data[i]));
+        data[i + 1] = Math.max(0, Math.min(255, data[i + 1]));
+        data[i + 2] = Math.max(0, Math.min(255, data[i + 2]));
+      }
+
+      context.putImageData(imageData, 0, 0);
+
+      canvas.toBlob(async (blob) => {
         capturedBlob = blob;
+
+        // Turn off flash after capture
+        if (stream && flashEnabled) {
+          const track = stream.getVideoTracks()[0];
+          try {
+            await track.applyConstraints({
+              advanced: [{ torch: false }]
+            });
+            flashEnabled = false;
+            flashBtn.textContent = '💡 Flash OFF';
+          } catch (err) {
+            console.error('Could not turn off flash:', err);
+          }
+        }
 
         // Hide video, show preview
         video.style.display = 'none';
@@ -411,7 +527,7 @@
         retakeBtn.classList.remove('hidden');
         uploadBtn.classList.remove('hidden');
         uploadBtn.disabled = false;
-      }, 'image/jpeg', 0.9);
+      }, 'image/jpeg', 0.95);
     });
 
     // Retake photo
@@ -455,12 +571,15 @@
         const data = await response.json();
 
         if (response.ok) {
-          showStatus(uploadStatus, '✓ Position sent to desktop!', 'success');
+          showStatus(uploadStatus, '✓ AI detected position - check if correct!', 'success');
           currentFen = data.fen;
-          fenText.textContent = 'FEN: ' + data.fen;
+          fenText.textContent = data.fen;
           fenDisplay.classList.remove('hidden');
-          copyBtn.textContent = '📋 Copy';
-          copyBtn.classList.remove('copy-success');
+          fenDisplay.classList.remove('copied');
+
+          // Show editor to allow corrections
+          fenInput.value = data.fen;
+          fenEditor.classList.remove('hidden');
         } else {
           showStatus(uploadStatus, '✗ Error: ' + data.error, 'error');
           uploadBtn.disabled = false;
@@ -471,17 +590,17 @@
       }
     });
 
-    // Copy FEN to clipboard
-    copyBtn.addEventListener('click', async () => {
+    // Copy FEN to clipboard when clicking the display box
+    fenDisplay.addEventListener('click', async () => {
+      if (!currentFen) return;
+
       try {
         await navigator.clipboard.writeText(currentFen);
-        copyBtn.textContent = '✓ Copied!';
-        copyBtn.classList.add('copy-success');
+        fenDisplay.classList.add('copied');
 
         setTimeout(() => {
-          copyBtn.textContent = '📋 Copy';
-          copyBtn.classList.remove('copy-success');
-        }, 2000);
+          fenDisplay.classList.remove('copied');
+        }, 1500);
       } catch (err) {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
@@ -492,17 +611,46 @@
         textArea.select();
         try {
           document.execCommand('copy');
-          copyBtn.textContent = '✓ Copied!';
-          copyBtn.classList.add('copy-success');
+          fenDisplay.classList.add('copied');
           setTimeout(() => {
-            copyBtn.textContent = '📋 Copy';
-            copyBtn.classList.remove('copy-success');
-          }, 2000);
+            fenDisplay.classList.remove('copied');
+          }, 1500);
         } catch (err) {
           alert('Could not copy to clipboard');
         }
         document.body.removeChild(textArea);
       }
+    });
+
+    // Send manually corrected FEN
+    sendManualFen.addEventListener('click', () => {
+      const correctedFen = fenInput.value.trim();
+      const code = pairingCodeInput.value;
+
+      if (!correctedFen) {
+        alert('Please enter a valid FEN string');
+        return;
+      }
+
+      if (code.length !== 4) {
+        alert('Please enter a 4-digit pairing code');
+        return;
+      }
+
+      // Update current FEN
+      currentFen = correctedFen;
+      fenText.textContent = correctedFen;
+
+      // Send to desktop
+      socket.emit('manual-position', { pairingCode: code, fen: correctedFen });
+
+      showStatus(uploadStatus, '✓ Corrected position sent to desktop!', 'success');
+    });
+
+    // Handle manual position from socket (in case we want to send without server)
+    socket.on('position-detected', ({ fen }) => {
+      // This handles positions sent from server
+      console.log('Position received via socket:', fen);
     });
 
     function showStatus(element, message, type) {

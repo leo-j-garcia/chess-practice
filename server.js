@@ -89,25 +89,82 @@ async function detectChessPosition(imageBuffer) {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // Use Pro model for better accuracy with vision
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-pro",
+      generationConfig: {
+        temperature: 0.1, // Lower temperature for more accurate/deterministic output
+      }
+    });    const prompt = `You are an expert chess position analyzer. Your task is to read a PRINTED CHESS DIAGRAM from a book with 100% accuracy.
 
-    const prompt = `You are a chess position analyzer. Analyze this image of a chess board and return a JSON response with the position and who moves next.
+STEP 1 - UNDERSTAND THE DIAGRAM FORMAT:
+- This is a PRINTED chess diagram in a book, NOT a photo of a real board
+- The board is shown from WHITE'S perspective
+- Rank 8 (black's back rank) is at the TOP
+- Rank 1 (white's back rank) is at the BOTTOM
+- Files a-h go from LEFT to RIGHT
+- The board has 8 files (columns) and 8 ranks (rows) = 64 squares total
 
-Important instructions:
-1. Look at the chess board and identify all pieces
-2. Read any text in the image (often below the board) that says "White to move", "Black to move", "White to play", "Black to play", etc.
-3. Return a JSON object with:
-   - "fen": the FEN string for the position
-   - "sideToMove": either "w" for white or "b" for black based on the text in the image
+STEP 2 - IDENTIFY PIECE COLORS:
+- White pieces are HOLLOW/OUTLINED (you can see inside them)
+- Black pieces are SOLID/FILLED (completely black/dark)
+- Look very carefully at each piece to determine if it's hollow (white) or filled (black)
 
-FEN format details:
-- Use standard notation: K=white king, k=black king, Q=queen, R=rook, B=bishop, N=knight, P=pawn (uppercase=white, lowercase=black)
-- Numbers represent empty squares
-- Start from rank 8 (top) to rank 1 (bottom), files a-h (left to right)
-- FEN format: piece placement / piece placement / ... / piece placement side_to_move castling en_passant halfmove fullmove
+STEP 3 - IDENTIFY PIECE TYPES:
+- KING (K/k): Tallest piece with a cross on top
+- QUEEN (Q/q): Tall piece with multiple small points on crown
+- ROOK (R/r): Castle tower with crenellations on top
+- BISHOP (B/b): Pointed hat/miter shape, slanted top
+- KNIGHT (N/n): Horse head shape (unique silhouette)
+- PAWN (P/p): Smallest piece, round top
 
-Return ONLY valid JSON, nothing else. Example:
-{"fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "sideToMove": "w"}`;
+STEP 4 - READ RANK BY RANK:
+I will now analyze EACH rank systematically from rank 8 down to rank 1.
+
+For RANK 8 (top row), going left to right (a8, b8, c8, d8, e8, f8, g8, h8):
+[Count each square carefully - if empty, note it. If piece, identify type and color]
+
+For RANK 7 (second row), going left to right (a7, b7, c7, d7, e7, f7, g7, h7):
+[Continue same process]
+
+[Do this for ALL 8 ranks]
+
+STEP 5 - COUNT EMPTY SQUARES:
+- Between pieces on the same rank, count consecutive empty squares
+- Represent consecutive empty squares as a NUMBER (1-8)
+- Make sure squares add up to 8 per rankSTEP 6 - VERIFY YOUR WORK:
+Before finalizing:
+1. Count total pieces - does it make sense? (typical game has 16-32 pieces total)
+2. Each rank string should represent exactly 8 squares (pieces + empty squares)
+3. Check you have exactly 8 rank strings separated by /
+4. Verify piece colors match their appearance (hollow=white, filled=black)
+
+STEP 7 - READ THE TEXT:
+Look for text below/near diagram:
+- "White to play" or "White to move" → sideToMove = "w"
+- "Black to play" or "Black to move" → sideToMove = "b"
+- If unclear, default to "w"
+
+STEP 8 - OUTPUT FORMAT:
+Return ONLY this JSON (no other text):
+{
+  "fen": "rank8/rank7/rank6/rank5/rank4/rank3/rank2/rank1 w KQkq - 0 1",
+  "sideToMove": "w"
+}
+
+IMPORTANT FEN RULES:
+- Uppercase = White pieces (KQRBNP)
+- Lowercase = Black pieces (kqrbnp)
+- Numbers = empty squares (1-8)
+- / = separates ranks
+- Each rank must sum to 8 squares
+
+EXAMPLE:
+If rank 8 has: black rook, empty, empty, black queen, empty, black rook, black king, empty
+FEN for rank 8: "r2q1rk1"
+(r=black rook, 2=two empty, q=black queen, 1=one empty, r=black rook, k=black king, 1=one empty)
+
+Now analyze the image and return the JSON.`;
 
     const imagePart = {
       inlineData: {
